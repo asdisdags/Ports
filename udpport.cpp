@@ -12,63 +12,71 @@
 
 using namespace std;
 
-void scan(int lowPort, int highPort, string host){
-    for (int i = lowPort; i <= highPort; i++){
+void scan(int low_port, int high_port, string host){
+    for (int i = low_port; i <= high_port; i++) {
         int sock = socket(AF_INET, SOCK_DGRAM, 0);
         if (sock < 0){
-            cout << "Error creating socket" << endl;
-            exit(1);
+            perror("Failed to create socket");
         }
-        struct sockaddr_in server;
-        server.sin_family = AF_INET;
-        server.sin_port = htons(i);
+
+        struct sockaddr_in server_address;
+        server_address.sin_family = AF_INET;
+        server_address.sin_port = htons(i);
+
         struct hostent *hp = gethostbyname(host.c_str());
         
         if (hp == 0){
-            cout << "Error: unknown host" << endl;
+            perror("Unknown host");
             exit(1);
         }
-        bcopy((char *)hp->h_addr, (char *)&server.sin_addr, hp->h_length);
-        int err = connect(sock, (struct sockaddr *)&server, sizeof(server));
-        if (err < 0){
+
+        bcopy((char *)hp->h_addr, (char *)&server_address.sin_addr, hp->h_length);
+        
+        if (connect(sock, (struct sockaddr *)&server_address, sizeof(server_address)) < 0){
             cout << "Error connecting to port " << i << endl;
         }
-        else{
+        else {
             cout << "Port " << i << " is open" << endl;
         }
+
         close(sock);
     }
 }
 
 int main(int argc, char* argv[])
 {   
+    // check if the user entered the correct number of arguments
+    if (argc < 4) { 
+        printf("usage: scanner <IP address> <low port> <high port>\n"); 
+        exit(1); 
+    }
+
     string host = argv[1];
-    int lowPort = atoi(argv[2]);
-    int highPort = atoi(argv[3]);
-    struct sockaddr_in server_addr;
-    struct hostent *server;
-    cout << "what the woof"<< endl;
+    int low_port = atoi(argv[2]);
+    int high_port = atoi(argv[3]);
+
     int sockfd;
 
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
     {
-        cout << "socket failed" << endl;
-        perror("socket failed");
-        exit(1);
+        perror("Failed to create socket"); 
+        exit(1); // eða return (-1)?
     }
     
+    struct sockaddr_in server_addr;
+    struct hostent *server;
+
     server = gethostbyname(argv[1]);
 
-    if (server = NULL){
-        cout << "Error, no such host" << endl;
+    if (server == NULL){
+        perror("No such host");
         exit(0);
     }
 
     bzero((char *) &server_addr, sizeof(server_addr));
-    cout << "we here" << endl;
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(atoi(argv[2]));
-    scan(lowPort, highPort, host);
+    server_addr.sin_port = htons(low_port);
+    scan(low_port, high_port, host);
     return 0;
-    }
+}
     
