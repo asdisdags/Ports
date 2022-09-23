@@ -20,8 +20,9 @@ void scan(int low_port, int high_port, string host){
         }
 
         struct sockaddr_in server_address;
+        bzero((char *) &server_address, sizeof(server_address));
         server_address.sin_family = AF_INET;
-        server_address.sin_port = htons(i);
+        server_address.sin_port = i;
 
         struct hostent *hp = gethostbyname(host.c_str());
         
@@ -54,28 +55,6 @@ int main(int argc, char* argv[])
     string host = argv[1];
     int low_port = atoi(argv[2]);
     int high_port = atoi(argv[3]);
-
-    int sockfd;
-
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
-    {
-        perror("Failed to create socket"); 
-        exit(1); // eða return (-1)?
-    }
-    
-    struct sockaddr_in server_addr;
-    struct hostent *server;
-
-    server = gethostbyname(argv[1]);
-
-    if (server == NULL){
-        perror("No such host");
-        exit(0);
-    }
-
-    bzero((char *) &server_addr, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(low_port);
     scan(low_port, high_port, host);
     return 0;
 }
