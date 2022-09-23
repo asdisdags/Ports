@@ -13,33 +13,35 @@
 using namespace std;
 
 void scan(int low_port, int high_port, string host){
+    char server_message[2048];
+    char client_message[2048];
     for (int i = low_port; i <= high_port; i++) {
-        int sock = socket(AF_INET, SOCK_DGRAM, 0);
+        int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         if (sock < 0){
             perror("Failed to create socket");
         }
+        memset(server_message, '\0', sizeof(server_message));
+        memset(client_message, '\0', sizeof(client_message));
 
         struct sockaddr_in server_address;
-        bzero((char *) &server_address, sizeof(server_address));
         server_address.sin_family = AF_INET;
-        server_address.sin_port = i;
+        server_address.sin_port = htons(i);
+        server_address.sin_addr.s_addr = inet_addr(host.c_str());
 
-        struct hostent *hp = gethostbyname(host.c_str());
-        
-        if (hp == 0){
-            perror("Unknown host");
-            exit(1);
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 100000;
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof(tv));
+        if (sendto(sock, client_message, strlen(client_message), 0, (struct sockaddr*)&server_address, sizeof(server_address)) < 0){
+            perror("Failed to send message");
         }
-
-        bcopy((char *)hp->h_addr, (char *)&server_address.sin_addr, hp->h_length);
-        
-        if (connect(sock, (struct sockaddr *)&server_address, sizeof(server_address)) < 0){
-            cout << "Error connecting to port " << i << endl;
-        }
-        else {
+        if (recvfrom(sock, server_message, sizeof(server_message), 0, (struct sockaddr*)&server_address, (socklen_t*)&server_address) < 0){
+            cout << "Port " << i << " is closed" << endl;
+        } else {
             cout << "Port " << i << " is open" << endl;
+            cout << server_message << endl;
         }
-
+       
         close(sock);
     }
 }
