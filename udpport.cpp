@@ -80,28 +80,30 @@ int main(int argc, char* argv[])
         }
 
         memset(&server_address, 0, sizeof(server_address));
-        server_address.sin_addr.s_addr = inet_addr(host);
         server_address.sin_family = AF_INET;
         server_address.sin_port = htons(i);
+        inet_aton(host, &server_address.sin_addr);
 
         if (inet_pton(AF_INET, host, &server_address.sin_addr) <= 0){
             perror("Failed to set socket address");
             exit(0);
         }
 
-        sendto(sockfd, "hello", 5, 0, (struct sockaddr *)&server_address, sizeof(server_address));
-        
-        struct timeval tv;
-        tv.tv_sec = 0;
-        tv.tv_usec = 100000;
-        setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-        socklen_t socket_len = sizeof(server_address);
-
-        if (recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&server_address, &socket_len) >= 0){
-            cout << "Port " << i << " is open" << endl;
-        }
-        else {
-            cout << "Port " << i << " is closed" << endl;
+        if (connect(sockfd, (struct sockaddr *)&server_address, sizeof(struct sockaddr_in)) == 0) {
+            sendto(sockfd, "hello", 5, 0, (struct sockaddr *)&server_address, sizeof(server_address));
+            
+            struct timeval tv;
+            tv.tv_sec = 0;
+            tv.tv_usec = 500000;
+            setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+            socklen_t socket_len = sizeof(server_address);
+            
+            if (recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&server_address, &socket_len) >= 0){
+                cout << "Port " << i << " is open" << endl;
+            }
+            else {
+                cout << "Port " << i << " is closed" << endl;
+            }
         }
 
         close(sockfd);
