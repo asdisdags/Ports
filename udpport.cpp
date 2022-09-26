@@ -24,6 +24,7 @@ void scan(int low_port, int high_port, string host){
         memset(client_message, '\0', sizeof(client_message));
 
         struct sockaddr_in server_address;
+        int sock_addr_len = sizeof(server_address);
         server_address.sin_family = AF_INET;
         server_address.sin_port = htons(i);
         server_address.sin_addr.s_addr = inet_addr(host.c_str());
@@ -35,7 +36,7 @@ void scan(int low_port, int high_port, string host){
         if (sendto(sock, client_message, strlen(client_message), 0, (struct sockaddr*)&server_address, sizeof(server_address)) < 0){
             perror("Failed to send message");
         }
-        if (recvfrom(sock, server_message, sizeof(server_message), 0, (struct sockaddr*)&server_address, (socklen_t*)&server_address) < 0){
+        if (recvfrom(sock, server_message, sizeof(server_message), 0, (struct sockaddr*)&server_address, (socklen_t*)&sock_addr_len) < 0){
             cout << "Port " << i << " is closed" << endl;
         } else {
             cout << "Port " << i << " is open" << endl;
