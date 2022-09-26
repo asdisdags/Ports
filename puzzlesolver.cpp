@@ -113,12 +113,12 @@ int main(int argv, char* argc[]){
 
     }
 
-    // struct sockaddr_in server_address;
-    // server_address.sin_family = AF_INET;
-    // server_address.sin_port = htons(atoi(argc[2]));
-    // server_address.sin_addr.s_addr = inet_addr(argc[1]);
+    struct sockaddr_in server_address;
+    server_address.sin_family = AF_INET;
+    server_address.sin_port = htons(atoi(argc[2]));
+    server_address.sin_addr.s_addr = inet_addr(argc[1]);
 
-    // sendto(sockfd, client_buffer, strlen(client_buffer), 0, (struct sockaddr*)&server_address, sizeof(server_address));
-    // recvfrom(sockfd, server_buffer, sizeof(server_buffer), 0, (struct sockaddr*)&server_address, (socklen_t*)&server_address);
-    // cout << server_buffer << endl;
+    sendto(sockfd, client_buffer, strlen(client_buffer), 0, (struct sockaddr*)&server_address, sizeof(server_address));
+    recvfrom(sockfd, server_buffer, sizeof(server_buffer), 0, (struct sockaddr*)&server_address, (socklen_t*)&server_address);
+    cout << server_buffer << endl;
 }
