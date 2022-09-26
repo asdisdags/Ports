@@ -13,7 +13,7 @@
 
 int main(){
     char server_message[2048];
-    char client_message[2048];
+    char client_message[2048] = "$group_60$";
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock < 0){
         perror("Failed to create socket");
@@ -21,7 +21,7 @@ int main(){
     memset(server_message, '\0', sizeof(server_message));
     memset(client_message, '\0', sizeof(client_message));
     std::string host = "130.208.242.120";
-    int port = 4011;
+    int port = 4001;
     struct sockaddr_in server_address;
     int sock_addr_len = sizeof(server_address);
     server_address.sin_family = AF_INET;
