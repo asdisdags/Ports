@@ -22,8 +22,9 @@ struct pseudo_header
     u_int32_t dest_address;
     u_int8_t placeholder;
     u_int8_t protocol;
-    u_int16_t tcp_length;
+    u_int16_t udp_length;
 };
+
 
 
 unsigned short csum(unsigned short *ptr,int nbytes) {
@@ -50,7 +51,7 @@ unsigned short csum(unsigned short *ptr,int nbytes) {
 }
 
 int main(int argv, char* argc[]){
-    int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
+    int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     if (sockfd < 0){
         perror("Failed to create socket");
     }
@@ -58,6 +59,7 @@ int main(int argv, char* argc[]){
     char server_buffer[2048];
     char datagram[4096], source_ip[32], *data, *pseudogram;
     memset(datagram, 0, 4096);
+    int port = atoi(argc[2]); 
     struct iphdr *iph = (struct iphdr *) datagram;
     struct udphdr *udph = (struct udphdr *) (datagram + sizeof (struct ip));
     struct sockaddr_in sin;
@@ -67,7 +69,7 @@ int main(int argv, char* argc[]){
 
     strcpy(data, client_buffer);
     sin.sin_family = AF_INET;
-    sin.sin_port = htons(80);
+    sin.sin_port = htons(port);
     sin.sin_addr.s_addr = inet_addr(argc[1]);
 
     iph->ihl = 5;
@@ -84,8 +86,8 @@ int main(int argv, char* argc[]){
 
     iph->check = csum((unsigned short *) datagram, iph->tot_len);
 
-    udph->source = htons(5678);
-    udph->dest = htons(80);
+    udph->source = htons(6666);
+    udph->dest = htons(8622);
     udph->len = htons(8 + strlen(data));
     udph->check = 0;
 
@@ -94,7 +96,7 @@ int main(int argv, char* argc[]){
     psh.dest_address = sin.sin_addr.s_addr;
     psh.placeholder = 0;
     psh.protocol = IPPROTO_UDP;
-    psh.tcp_length = htons(sizeof(struct udphdr) + strlen(data) );
+    psh.udp_length = htons(sizeof(struct udphdr) + strlen(data) );
 
     int psize = sizeof(struct pseudo_header) + sizeof(struct udphdr) + strlen(data);
     pseudogram = (char*)malloc(psize);
@@ -106,12 +108,13 @@ int main(int argv, char* argc[]){
 
     if(sendto(sockfd, datagram, iph->tot_len, 0, (struct sockaddr*) &sin, sizeof(sin)) < 0){
         cout << "Error sending packet" << endl;
-    }
-    else{
+    } else {
         cout << "Packet sent" << endl;
-        cout << datagram << endl;
-
+        for (int i = 0; i < 2048; i++){
+            cout << datagram[i];
+        }
     }
+
 
     struct sockaddr_in server_address;
     server_address.sin_family = AF_INET;
@@ -120,5 +123,9 @@ int main(int argv, char* argc[]){
 
     sendto(sockfd, client_buffer, strlen(client_buffer), 0, (struct sockaddr*)&server_address, sizeof(server_address));
     recvfrom(sockfd, server_buffer, sizeof(server_buffer), 0, (struct sockaddr*)&server_address, (socklen_t*)&server_address);
-    cout << server_buffer << endl;
+    cout << "Message from server: " << server_buffer << endl;
 }
+
+
+//secret port: 4078
+//secret port receiver: 4011
