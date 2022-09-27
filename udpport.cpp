@@ -36,9 +36,7 @@ void scan(int low_port, int high_port, string host){
         if (sendto(sock, client_message, strlen(client_message), 0, (struct sockaddr*)&server_address, sizeof(server_address)) < 0){
             perror("Failed to send message");
         }
-        if (recvfrom(sock, server_message, sizeof(server_message), 0, (struct sockaddr*)&server_address, (socklen_t*)&sock_addr_len) < 0){
-            cout << "Port " << i << " is closed" << endl;
-        } else {
+        if (recvfrom(sock, server_message, sizeof(server_message), 0, (struct sockaddr*)&server_address, (socklen_t*)&sock_addr_len) >= 0){
             cout << "Port " << i << " is open" << endl;
             cout << server_message << endl;
         }

@@ -45,6 +45,7 @@ string receive_buffer_from_server(const char* ip, int port, int udp_socket, char
     char receiving_buffer[1400];
     struct sockaddr_in destination;
     memset(&receiving_buffer, 0, sizeof(receiving_buffer));
+    
     if (udp_socket > 0){
         fd_set readfds;
         FD_SET(udp_socket, &readfds);
@@ -58,6 +59,7 @@ string receive_buffer_from_server(const char* ip, int port, int udp_socket, char
         if (sendto(udp_socket, buffer, buffer_len,0,(struct sockaddr *)&destination, sizeof(destination)) < 0){
             cout << "Error sending to port " << port << endl;
         }
+        
         else {
             int t = select(udp_socket + 1, &readfds, NULL, NULL, &tv);
             if (t > 0){
@@ -226,15 +228,17 @@ int main(int argc, char *argv[]){
     strcpy(client_buf, "$group_60$");
     len = strlen(client_buf) + 1; 
 
-    if (argc == 2){
+    //  ./puzzlesolver <ip>
+    if (argc == 2) {
         ip = argv[1];
         int port1 = atoi(argv[2]);
         udp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
     }
-    else if (argc == 6){
+    // ./puzzlesolver <ip> <port1> <port2> <port3> <port4>
+    else if (argc == 6) {
         udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
         ip = argv[1];
-        for(int i = 2; i < 6; i++){
+        for (int i = 2; i < 6; i++) {
             oports.insert(atoi(argv[i]));
         }
     } else {
