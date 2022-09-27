@@ -40,6 +40,7 @@ string SECRET_STRING = "My boss told me ";
 string EVILBIT_STRING = "The dark side of";
 
 
+
 string receive_buffer_from_server(const char* ip, int port, int udp_socket, char* buffer, int buffer_len){
     string incoming;
     char receiving_buffer[1400];
@@ -78,7 +79,6 @@ string receive_buffer_from_server(const char* ip, int port, int udp_socket, char
     return incoming;
 }
 
-
 u_short calculate_checksum(unsigned short *udpheader, u_short len){
     long checksum;
     u_short odd_byte;
@@ -101,19 +101,6 @@ u_short calculate_checksum(unsigned short *udpheader, u_short len){
 
     return checksum_short;
 }
-
-queue<string> oracle_information(set<int> oports, char *ip, int udp_socket, struct in_addr destination){
-    char buffer[1400];
-    strcpy(buffer, "$group_60$");
-    queue<string> oracle_info;
-    string secret_phrase = "";
-    set<int> invis_ports;
-
-    string messages_from_server = receive_buffer_from_server(ip, ports[checksum_port], udp_socket, buffer, strlen(buffer));
-
-
-}
-
 
 
 string secret_phrase(u_short checksum, string source_address, int udp_sock){
@@ -170,7 +157,9 @@ string secret_phrase(u_short checksum, string source_address, int udp_sock){
 
     string secret_phrase, messages = "", index_beginning = "Hello group_60";
     messages = receive_buffer_from_server("130.208.242.120", ports[checksum_port], udp_sock, udp_buffer, len);
+    cout << "before the while loop " << endl;
     while(true){
+        cout << "we in the secret phrase while loop" << endl;
         if(strstr(messages.c_str(), index_beginning.c_str())){
             secret_phrase = messages;
             cout<< "secret phrase is: " << secret_phrase << endl;
@@ -182,7 +171,54 @@ string secret_phrase(u_short checksum, string source_address, int udp_sock){
 
 
 
-void send_to_available_ports(set<int> udpports, const char *ip, int udp_socket){
+
+string string_manipulation(string message, string whole_message) {
+    string manipulation_string;
+    int index = whole_message.find(message) + sizeof(message);
+    cout << "message: " << message << endl;
+    cout << "whole_message: " << whole_message << endl;
+    while (true){
+        //cout << "index is: " << index << endl;
+        if (whole_message[index] != '!'){
+            manipulation_string += whole_message[index];
+            index += 1;
+        }
+    }
+    return manipulation_string;
+}
+
+
+
+queue<string> oracle_information(set<int> oports, char *ip, int udp_socket, struct in_addr destination){
+    char buffer[1400];
+    strcpy(buffer, "$group_60$");
+    queue<string> oracle_info;
+    set<int> invis_ports;
+    cout << "we in the oracle" << endl;
+    string messages_from_server = receive_buffer_from_server(ip, ports[checksum_port], udp_socket, buffer, strlen(buffer));
+    while(1){
+        cout << "before if"<< endl;
+        if (strstr(messages_from_server.c_str(), CHECKSUM_STRING.c_str())){
+            cout << "bang" << endl;
+            string source_addr_in_string = string_manipulation("source address being ", messages_from_server);
+            string checksum = string_manipulation("checksum is ", messages_from_server);
+            u_short short_checksum = (unsigned short) (stoul(checksum, 0, 16));
+            string s_phrase = secret_phrase(short_checksum, source_addr_in_string, udp_socket);
+            cout << "secret phrase is: " << s_phrase << endl;
+            break;
+        }
+        messages_from_server = receive_buffer_from_server(ip, ports[checksum_port], udp_socket, buffer, strlen(buffer));
+    }
+
+}
+
+
+
+
+
+
+
+void send_to_available_ports(set<int> udpports, char *ip, int udp_socket){
     char client_buf[1400];
     strcpy(client_buf, "$group_60$");
     cout << "we he in open ports function" << endl;
@@ -191,22 +227,25 @@ void send_to_available_ports(set<int> udpports, const char *ip, int udp_socket){
         string messages_from_server = "";
         while (messages_from_server == ""){
             messages_from_server = receive_buffer_from_server(ip, port, udp_socket, client_buf, strlen(client_buf) + 1);
-            cout << messages_from_server << endl;
             }  
         if (strstr(messages_from_server.c_str(), CHECKSUM_STRING.c_str())){
             ports[checksum_port] = port;
             //cout << "Message from " << port << " is " << messages_from_server << endl;
+            cout << "checksum" << endl;
         }
         if (strstr(messages_from_server.c_str(), EVILBIT_STRING.c_str())){
             ports[evil_port] = port;
+            cout << "evil" << endl;
             //cout << "Message from " << port << " is " << messages_from_server << endl;
         }
         if (strstr(messages_from_server.c_str(), ORACLE_STRING.c_str())){
             ports[oracle_port] = port;
+            cout << "oracle" << endl;
             //cout << "Message from " << port << " is " << messages_from_server << endl;
         }
         if (strstr(messages_from_server.c_str(), SECRET_STRING.c_str())){
             ports[simple_port] = port;
+            cout << "secret" << endl;
             //cout << "Message from " << port << " is " << messages_from_server << endl;
         }
         }
@@ -220,7 +259,7 @@ int main(int argc, char *argv[]){
     struct sockaddr_in server_address;
     string message;
 
-    const char* ip;
+    char* ip;
     int udp_socket;
 
     set<int> oports;
@@ -248,9 +287,13 @@ int main(int argc, char *argv[]){
         exit(0);
     }
 
+    
+
     send_to_available_ports(oports, ip, udp_socket);
-    while(ports[checksum_port] == 0 || ports[oracle_port] == 0 || ports[simple_port] == 0 || ports[evil_port] == 0){
-        send_to_available_ports(oports, ip, udp_socket);
-    }
+    // while(ports[checksum_port] == 0 || ports[oracle_port] == 0 || ports[simple_port] == 0 || ports[evil_port] == 0){
+    //     send_to_available_ports(oports, ip, udp_socket);
+    // }
+
+    queue<string> oracle_info = oracle_information(oports, ip, udp_socket, server_address.sin_addr);
 
 }
