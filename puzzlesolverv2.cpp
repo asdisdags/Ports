@@ -156,11 +156,11 @@ string secret_phrase(u_short checksum, string source_address, int udp_sock){
     string secret_phrase, messages = "", index_beginning = "Hello group_60";
     messages = receive_buffer_from_server("130.208.242.120", ports[checksum_port], udp_sock, udp_buffer, len);
     cout << "before the while loop " << endl;
+    cout << messages << endl;
     while(true){
-        cout << "we in the secret phrase while loop" << endl;
         if(strstr(messages.c_str(), index_beginning.c_str())){
+            cout << "we got in" << endl;
             secret_phrase = messages;
-            cout<< "secret phrase is: " << secret_phrase << endl;
             break;
         }
     }
@@ -170,20 +170,23 @@ string secret_phrase(u_short checksum, string source_address, int udp_sock){
 
 
 
-string string_manipulation(string message, string whole_message) {
+string string_manipulation(string message, string whole_message, char to_break) {
     string manipulation_string;
-    int index = whole_message.find(message) + sizeof(message);
+    int index = whole_message.find(message) + message.size();
+    cout << index << endl;
     cout << "message: " << message << endl;
     cout << "whole_message: " << whole_message << endl;
-    while (true){
-        //cout << "index is: " << index << endl;
-        if (whole_message[index] != '!'){
-            manipulation_string += whole_message[index];
-            index += 1;
+    while(whole_message[index] != to_break){
+        cout <<"index: " <<whole_message[index] << endl;
+        manipulation_string += whole_message[index];
+        index++;
         }
+        cout <<"manipulation: " <<manipulation_string << endl;
+        return manipulation_string;
     }
-    return manipulation_string;
-}
+    
+    
+
 
 
 
@@ -198,8 +201,8 @@ queue<string> oracle_information(set<int> oports, char *ip, int udp_socket, stru
         cout << "before if"<< endl;
         if (strstr(messages_from_server.c_str(), CHECKSUM_STRING.c_str())){
             cout << "bang" << endl;
-            string source_addr_in_string = string_manipulation("source address being ", messages_from_server);
-            string checksum = string_manipulation("checksum is ", messages_from_server);
+            string source_addr_in_string = string_manipulation("source address being ", messages_from_server, '!');
+            string checksum = string_manipulation("checksum of ", messages_from_server, ',');
             u_short short_checksum = (unsigned short) (stoul(checksum, 0, 16));
             string s_phrase = secret_phrase(short_checksum, source_addr_in_string, udp_socket);
             cout << "secret phrase is: " << s_phrase << endl;
