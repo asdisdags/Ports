@@ -168,25 +168,19 @@ string secret_phrase(u_short checksum, string source_address, int udp_sock){
     }
 }
 
-
-
-
-
 string string_manipulation(string message, string whole_message) {
     string manipulation_string;
-    int index = whole_message.find(message) + sizeof(message);
+    int index = whole_message.find(message) + message.size();
     cout << "message: " << message << endl;
     cout << "whole_message: " << whole_message << endl;
-    while (true){
-        //cout << "index is: " << index << endl;
-        if (whole_message[index] != '!'){
-            manipulation_string += whole_message[index];
-            index += 1;
-        }
+
+    while (whole_message[index] != '!') {
+        manipulation_string += whole_message[index];
+        index += 1;
     }
+
     return manipulation_string;
 }
-
 
 
 queue<string> oracle_information(set<int> oports, char *ip, int udp_socket, struct in_addr destination){
