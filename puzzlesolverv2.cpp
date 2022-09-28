@@ -167,7 +167,7 @@ string secret_phrase(u_short checksum, string source_address, int udp_sock){
 }
 
 
-struct in_addr local_address(){
+struct sockaddr_in local_address(){
     int the_socket = socket(AF_INET, SOCK_DGRAM, 0);
     struct sockaddr_in local;
     const char* ip = "130.208.242.120";
@@ -181,18 +181,18 @@ struct in_addr local_address(){
     struct sockaddr_in name;
     socklen_t namelen = sizeof(name);
     getsockname(the_socket, (struct sockaddr *)&name, &namelen);
-    //cout << "local ip: " << inet_ntoa(((struct sockaddr_in *)&name)->sin_addr) << endl;
-    //cout << "local port: " << ntohs(((struct sockaddr_in *)&name)->sin_port) << endl;
+    cout << "local ip: " << inet_ntoa(((struct sockaddr_in *)&name)->sin_addr) << endl;
+    cout << "local port: " << ntohs(((struct sockaddr_in *)&name)->sin_port) << endl;
 
     close(the_socket);
-    return name.sin_addr;
+    return name;
 
 }
 
   
 
 
-int evil_bit(const char* ip, struct in_addr destination){
+int evil_bit(const char* ip, struct sockaddr_in destination){
 
     int raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     if (raw_sock < 0){
@@ -214,7 +214,8 @@ int evil_bit(const char* ip, struct in_addr destination){
     struct ip *iphdr = (struct ip *)packet;
     struct udphdr *udphdr = (struct udphdr *)(packet + sizeof(struct ip));
     char *message = (char *)(packet + sizeof(struct ip) + sizeof(struct udphdr));
-    struct in_addr local = local_address();
+    struct sockaddr_in local = local_address();
+    cout << "local port: " << ntohs(((struct sockaddr_in *)&local)->sin_port) << endl;
 
 
     char source[INET_ADDRSTRLEN];
@@ -230,11 +231,11 @@ int evil_bit(const char* ip, struct in_addr destination){
     iphdr->ip_off = htons(0x8000);
     iphdr->ip_p = IPPROTO_UDP;
     iphdr->ip_sum = 0;
-    iphdr->ip_src = local;
-    iphdr->ip_dst = destination;
+    iphdr->ip_src = local.sin_addr;
+    iphdr->ip_dst = destination.sin_addr;
 
     // udp header
-    udphdr->uh_sport = htons(30000);
+    udphdr->uh_sport = htons(local.sin_port);
     udphdr->uh_dport = htons(evil_port);
     udphdr->uh_ulen = htons(sizeof(struct udphdr) + strlen(group_data));
     udphdr->uh_sum = 0;
@@ -249,12 +250,7 @@ int evil_bit(const char* ip, struct in_addr destination){
     inet_aton(ip, &receive_address.sin_addr);
     receive_address.sin_family = AF_INET;
     receive_address.sin_port = htons(30000);
-
-    if(bind(receive_socket, (struct sockaddr *)&receive_address, sizeof(receive_address)) < 0){
-        cout << "Error binding socket" << endl;
-        
-    }
-
+    cout << "before fd set" << endl;
     fd_set readfds;
     FD_SET(receive_socket, &readfds);
     struct timeval tv;
@@ -268,35 +264,39 @@ int evil_bit(const char* ip, struct in_addr destination){
 
     string messages_from_server;
     char* secret_port_evil;
-
+    cout << "before for loop" << endl;
     for (int i = 0; i < 5; i++){
+        cout << "in for loop" << endl;
         if (sendto(raw_sock, &packet, (sizeof(struct ip) + sizeof(struct udphdr) + strlen(group_data)), 0, (struct sockaddr *)&destination, sizeof(destination)) < 0){
             cout << "Error sending packet" << endl;
         }
+        cout << "after sendto" << endl;
 
         if(connect(raw_sock, (struct sockaddr *)&destination, sizeof(destination)) < 0){
             cout << "Error connecting socket" << endl;
         }
 
-        if(select(receive_socket + 1, &readfds, NULL, NULL, &tv)> 0){
-            int res = recvfrom(receive_socket, receiving_buffer, 1400, 0, (struct sockaddr *)&receive_address, (socklen_t *)&source_len);
-            if (res < 0){
-                cout << "Error receiving packet" << endl;
-            }
-            else {
-                char src_address[INET_ADDRSTRLEN];
-                inet_ntop(AF_INET, &(receive_address.sin_addr), src_address, INET_ADDRSTRLEN);
-                if((strcmp(ip, source) == 0) && (ntohs(receive_address.sin_port) == evil_port)){
-                    receiving_buffer[res] = '\0';
-                    secret_port_evil = receiving_buffer + res - 4;
-                    close(raw_sock);
-                    close(receive_socket);
-                    cout << "Messages: " << receiving_buffer << endl;
-                    cout << "Secret Port: " << secret_port_evil << endl;
-                    return stoi(secret_port_evil);
+        //if(select(receive_socket + 1, &readfds, NULL, NULL, &tv)> 0){
+        int res = recvfrom(receive_socket, receiving_buffer, 1400, 0, (struct sockaddr *)&receive_address, (socklen_t *)&source_len);
+        cout << "after recvfrom" << endl;
+        if (res < 0){
+            cout << "Error receiving packet" << endl;
+        }
+        else {
+            cout << "HELLO" << endl;
+            char src_address[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &(receive_address.sin_addr), src_address, INET_ADDRSTRLEN);
+            if((strcmp(ip, source) == 0) && (ntohs(receive_address.sin_port) == evil_port)){
+                receiving_buffer[res] = '\0';
+                secret_port_evil = receiving_buffer + res - 4;
+                close(raw_sock);
+                close(receive_socket);
+                cout << "Messages: " << receiving_buffer << endl;
+                cout << "Secret Port: " << secret_port_evil << endl;
+                return stoi(secret_port_evil);
                 }
             }
-        }
+        //}
     }
     return -1;
 }
@@ -319,7 +319,7 @@ string string_manipulation(string message, string whole_message, char to_break) 
 
 
 
-queue<string> oracle_information(set<int> oports, char *ip, int udp_socket, struct in_addr destination){
+queue<string> oracle_information(set<int> oports, char *ip, int udp_socket, struct sockaddr_in destination){
     char buffer[1400];
     strcpy(buffer, "$group_60$");
     queue<string> oracle_info;
@@ -423,7 +423,8 @@ int main(int argc, char *argv[]){
     //     send_to_available_ports(oports, ip, udp_socket);
     // }
 
-    queue<string> oracle_info = oracle_information(oports, ip, udp_socket, server_address.sin_addr);
-    //evil_bit(ip, server_address.sin_addr);
+    //queue<string> oracle_info = oracle_information(oports, ip, udp_socket, server_address.sin_addr);
+    cout << "server ip: " << inet_ntoa(((struct sockaddr_in *)&server_address)->sin_addr) << endl;
+    evil_bit(ip, server_address);
 
 }
