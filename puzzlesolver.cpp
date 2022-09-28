@@ -37,6 +37,8 @@ string ORACLE = "I am the oracle,";
 string SECRET = "My boss told me ";
 string DARKSIDE = "The dark side of";
 
+string SECRET_PHRASE = "Ennyn Durin Aran Moria. Pedo Mellon a Minno. Im Narvi hain echant. Celebrimbor o Eregion teithant i thiw hin.";
+
 // map for open ports and their messages
 map<string, int> ports;
 
@@ -55,20 +57,24 @@ string get_message_from_port(int port, int sockfd, char *ip_address, char *buffe
 
     struct timeval tv;
     tv.tv_sec = 0;
-    tv.tv_usec = 100000;
+    tv.tv_usec = 300000;
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof(tv));
 
-    if (sendto(sockfd, buffer, length, 0, (const struct sockaddr *)&sin, sizeof(sin)) < 0)
-    {
-        perror("Failed to send");
-        exit(1);
+    while (strlen(recv_buffer) == 0) {
+        if (sendto(sockfd, buffer, length, 0, (const struct sockaddr *)&sin, sizeof(sin)) < 0)
+        {
+            perror("Failed to send");
+            exit(1);
+        }
+
+        if (recvfrom(sockfd, recv_buffer, sizeof(recv_buffer), 0, (sockaddr *)&sin, (socklen_t *)&sock_addr_len) >= 0){
+            message = recv_buffer;
+            return message; 
+
+        }
     }
 
-    if (recvfrom(sockfd, recv_buffer, sizeof(recv_buffer), 0, (sockaddr *)&sin, (socklen_t *)&sock_addr_len) >= 0){
-        message = recv_buffer;
-    }
-
-    return message; // returns empty string or message from port
+    return message; // returns empty string
 }
 
 // adds ports to their corresponding messages in the ports map
@@ -77,11 +83,7 @@ void map_open_ports(set<int> open_ports, int sockfd, char *ip_address) {
     for (int port : open_ports) {
         
         // get message from port
-        string message = "";
-
-        while (message == "") {
-            message = get_message_from_port(port, sockfd, ip_address, initial_message, strlen(initial_message));
-        }
+        string message = get_message_from_port(port, sockfd, ip_address, initial_message, strlen(initial_message));
 
         if (strstr(message.c_str(), CHECKSUM.c_str())) {
             ports[CHECKSUM] = port;
@@ -141,7 +143,7 @@ string get_checksum_string(string message) {
     return checksum_string;
 }
 
-// code from https://www.binarytides.com/raw-sockets-c-code-linux/
+// code from https://www.binarytides.com/raw-udp-sockets-c-linux/
 u_short calculate_checksum(unsigned short *udpheader, u_short len){
     long checksum;
     u_short odd_byte;
@@ -165,9 +167,7 @@ u_short calculate_checksum(unsigned short *udpheader, u_short len){
     return checksum_short;
 }
 
-void oracle_solver() { vector<string> hidden_ports; }
-
-// code from https://www.binarytides.com/raw-sockets-c-code-linux/
+// code from https://www.binarytides.com/raw-udp-sockets-c-linux/
 int create_udp_packet(int port, char *ip_address, char* udp_buffer, u_short checksum, string source_address) {
     char *data, *pseudogram;
     // IP header
@@ -178,6 +178,7 @@ int create_udp_packet(int port, char *ip_address, char* udp_buffer, u_short chec
     struct sockaddr_in sin;
     struct pseudo_header psh;
 
+    u_short checksum_htonsed = htons(checksum);
     data = udp_buffer + sizeof(struct ip) + sizeof(struct udphdr);
 
     // set destination address
@@ -189,7 +190,7 @@ int create_udp_packet(int port, char *ip_address, char* udp_buffer, u_short chec
     iphdr->ip_hl = 5;
     iphdr->ip_v = 4;
     iphdr->ip_tos = 0;
-    iphdr->ip_len = htons(sizeof(struct ip) + sizeof(struct udphdr));
+    iphdr->ip_len = htons(sizeof(struct ip) + sizeof(struct udphdr) + strlen(data));
     iphdr->ip_ttl = 255;
     iphdr->ip_p = IPPROTO_UDP;
     iphdr->ip_off = 0;
@@ -221,59 +222,47 @@ int create_udp_packet(int port, char *ip_address, char* udp_buffer, u_short chec
     memcpy(pseudogram + sizeof(struct pseudo_header), udphdr, sizeof(struct udphdr));
 
     unsigned short p_checksum = calculate_checksum((unsigned short *) pseudogram, psize);
-    memcpy(data, &p_checksum, 2);
+   
+    memcpy(data, &initial_message, strlen(initial_message));
 
-    // udphdr->uh_sum = calculate_checksum((unsigned short *)udp_buffer, iphdr->ip_len);
-    udphdr->uh_sum = ntohs(checksum);
+    for (int i = 0; i < IP_MAXPACKET; i++) {
+        if (p_checksum != checksum_htonsed) {
+            udphdr->uh_sport = htons(i);
+            udphdr->uh_sum = calculate_checksum((unsigned short *)udp_buffer, iphdr->ip_len);
 
-    int udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
-	if (udp_socket < 0) {
-		perror("Failed to construct the receive udp socket");
-		exit(0);
-	}
+            memcpy(pseudogram, (char *)&psh, sizeof(struct pseudo_header));
+            memcpy(pseudogram + sizeof(struct pseudo_header), udphdr, sizeof(struct udphdr));
+
+            p_checksum = calculate_checksum((unsigned short *) pseudogram, psize);
+        }
+    }
     
+    udphdr->uh_sum = p_checksum;
+
     return htons(iphdr->ip_len);
 }
 
-// sends udp message where the payload is a UDP packet, return the response (secret phrase)
-string send_udp_message(int sockfd, char *ip_address, char *udp_packet, int length) {
-    string secret_phrase = "";
-
-
-    while (secret_phrase == "") {
-        secret_phrase = get_message_from_port(ports[CHECKSUM], sockfd, ip_address, udp_packet, length);
-    }
-
-    return secret_phrase;
-}
-
-void checksum_solver(int sockfd, char *ip_address) {
+string checksum_solver(int sockfd, char *ip_address) {
     // get message from checksum port
-    string message = "";
-    string secret_phrase = "";
-
-
-    while (strstr(message.c_str(), CHECKSUM.c_str()) == NULL)  {
-        message = get_message_from_port(ports[CHECKSUM], sockfd, ip_address, initial_message, strlen(initial_message));
+    string message = get_message_from_port(ports[CHECKSUM], sockfd, ip_address, initial_message, strlen(initial_message));
+    
+    // in case we didn't recieve the correct message
+    while (strstr(message.c_str(), CHECKSUM.c_str()) == NULL) {
+        string message = get_message_from_port(ports[CHECKSUM], sockfd, ip_address, initial_message, strlen(initial_message));
     }
 
     // get source address and checksum from message
     string source_address = get_source_address(message);
     string checksum_string = get_checksum_string(message);
-
-
-    cout << "Message from checksum port: " << message << endl;
-    cout << "\nSource address: " << source_address << endl;
-    cout << "\nChecksum string: " << checksum_string << endl;
     
     // convert checksum string to unsigned short
-    u_short checksum = (unsigned short) (stoul(checksum_string, 0, 16));
+    unsigned int checksum = stoul(checksum_string, nullptr, 16);
 
     // create valid UDP IPv4 packet
     char udp_buffer[IP_MAXPACKET];
     memset (udp_buffer, 0, IP_MAXPACKET);  // zero out the packet buffer
 
-    int length = create_udp_packet(ports[CHECKSUM], ip_address, udp_buffer, checksum, source_address);
+    int length = create_udp_packet(ports[CHECKSUM], ip_address, udp_buffer, checksum, source_address); // length of ip header
     
     int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -282,17 +271,23 @@ void checksum_solver(int sockfd, char *ip_address) {
 		exit(0);
 	}
 
-    // send udp message and get secret phrase
-    while (strstr(secret_phrase.c_str(), "Congratulations group 60!") == NULL) {
-        secret_phrase = get_message_from_port(ports[CHECKSUM], udp_sock, ip_address, udp_buffer, length);
-    }
+    // send udp message to checksum port and get secret phrase
+    string secret_phrase = get_message_from_port(ports[CHECKSUM], sockfd, ip_address, udp_buffer, length);
 
-    cout << "\nSecret phrase: " << secret_phrase << endl;
+    close(udp_sock);
+
+    return secret_phrase;
 }
 
 
 // returns secret port from SECRET message
-string get_secret_port(string message) {
+int get_secret_port(int sockfd, char *ip_address) {
+    string message = "";
+    
+    // while (strstr(message.c_str(), "SECRET") == NULL) {
+    //     message = get_message_from_port(ports[SECRET], sockfd, ip_address, initial_message, strlen(initial_message));
+    // }
+
     string secret_port;
     string substring = "secret port is "; // substring before secret port
 
@@ -304,22 +299,14 @@ string get_secret_port(string message) {
         i++;
     }
 
-    return secret_port;
+    return stoi(secret_port);
 }
-
-void secret_port_solver(int sockfd, char *ip_address) {
-    string secret_port = get_secret_port(SECRET);
-    cout << "Secret port: " << secret_port << endl;
-
-
-    // get message from secret port
-    string message = get_message_from_port(stoi(secret_port), sockfd, ip_address, initial_message, strlen(initial_message));
-    cout << "Message from secret port: " << message << endl;
-}
-
 
 void evil_bit_solver() {}
 
+void oracle_solver(char *ip_address) { 
+    vector<string> hidden_ports;
+}
 
 
 int main(int argc, char *argv[]) {
@@ -365,12 +352,10 @@ int main(int argc, char *argv[]) {
 
     // map open ports to their secret message
     map_open_ports(open_ports, sockfd, ip);
-    for (auto it = ports.begin(); it != ports.end(); it++) {
-        cout << it->second << ": " << it->first << "\n" << endl;
-    }
 
-    checksum_solver(sockfd, ip);
-    close(sockfd);
+    string secret_phrase = checksum_solver(sockfd, ip);
+
+    // close(sockfd);
     // secret_port_solver(sockfd, ip);
     return 0;
 }
