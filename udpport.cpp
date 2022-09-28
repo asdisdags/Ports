@@ -9,40 +9,49 @@
 #include <stdlib.h>
 #include <iostream>
 #include <string.h>
+#include <set>
 
 using namespace std;
 
-void scan(int low_port, int high_port, string host){
+set<int> scan(int low_port, int high_port, string host){
     char server_message[2048];
     char client_message[2048];
+    set<int> open_ports;
+
     for (int i = low_port; i <= high_port; i++) {
         int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        
         if (sock < 0){
             perror("Failed to create socket");
+            exit(1);
         }
+
         memset(server_message, '\0', sizeof(server_message));
         memset(client_message, '\0', sizeof(client_message));
 
+        // set up server address
         struct sockaddr_in server_address;
         int sock_addr_len = sizeof(server_address);
         server_address.sin_family = AF_INET;
         server_address.sin_port = htons(i);
         server_address.sin_addr.s_addr = inet_addr(host.c_str());
-
+        
+        // set timeout for recvfrom() - if no response before timeout, port is closed
         struct timeval tv;
         tv.tv_sec = 0;
-        tv.tv_usec = 100000;
+        tv.tv_usec = 200000;
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof(tv));
         if (sendto(sock, client_message, strlen(client_message), 0, (struct sockaddr*)&server_address, sizeof(server_address)) < 0){
             perror("Failed to send message");
         }
         if (recvfrom(sock, server_message, sizeof(server_message), 0, (struct sockaddr*)&server_address, (socklen_t*)&sock_addr_len) >= 0){
-            cout << "Port " << i << " is open" << endl;
-            cout << server_message << endl;
+            open_ports.insert(i);
         }
        
         close(sock);
     }
+
+    return open_ports;
 }
 
 int main(int argc, char* argv[])
@@ -56,7 +65,14 @@ int main(int argc, char* argv[])
     string host = argv[1];
     int low_port = atoi(argv[2]);
     int high_port = atoi(argv[3]);
-    scan(low_port, high_port, host);
+
+    set<int> open_ports = scan(low_port, high_port, host);
+
+    cout << "The following ports are open: " << endl;
+    for (int port : open_ports) {
+        cout << port << endl;
+    }
+
     return 0;
 }
     

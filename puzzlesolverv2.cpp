@@ -18,6 +18,7 @@
 #include "scanner.h"
 
 using namespace std;
+
 struct pseudo_header
 {
 	u_int32_t source_address;
@@ -26,7 +27,6 @@ struct pseudo_header
 	u_int8_t protocol;
 	u_int16_t udp_length;
 };
-
 
 int ports[4] = {0};
 int oracle_port = 0;
@@ -38,7 +38,6 @@ string CHECKSUM_STRING = "Hello, group_60!";
 string ORACLE_STRING = "I am the oracle,";
 string SECRET_STRING = "My boss told me ";
 string EVILBIT_STRING = "The dark side of";
-
 
 
 string receive_buffer_from_server(const char* ip, int port, int udp_socket, char* buffer, int buffer_len){
@@ -78,6 +77,7 @@ string receive_buffer_from_server(const char* ip, int port, int udp_socket, char
     }
     return incoming;
 }
+
 
 u_short calculate_checksum(unsigned short *udpheader, u_short len){
     long checksum;
@@ -158,29 +158,34 @@ string secret_phrase(u_short checksum, string source_address, int udp_sock){
     string secret_phrase, messages = "", index_beginning = "Hello group_60";
     messages = receive_buffer_from_server("130.208.242.120", ports[checksum_port], udp_sock, udp_buffer, len);
     cout << "before the while loop " << endl;
+    cout << messages << endl;
     while(true){
-        cout << "we in the secret phrase while loop" << endl;
         if(strstr(messages.c_str(), index_beginning.c_str())){
+            cout << "we got in" << endl;
             secret_phrase = messages;
-            cout<< "secret phrase is: " << secret_phrase << endl;
             break;
         }
     }
 }
 
-string string_manipulation(string message, string whole_message) {
+
+string string_manipulation(string message, string whole_message, char to_break) {
     string manipulation_string;
     int index = whole_message.find(message) + message.size();
+    cout << index << endl;
     cout << "message: " << message << endl;
     cout << "whole_message: " << whole_message << endl;
-
-    while (whole_message[index] != '!') {
+    while(whole_message[index] != to_break){
+        cout <<"index: " <<whole_message[index] << endl;
         manipulation_string += whole_message[index];
-        index += 1;
+        index++;
+        }
+        cout <<"manipulation: " <<manipulation_string << endl;
+        return manipulation_string;
     }
+    
+    
 
-    return manipulation_string;
-}
 
 
 queue<string> oracle_information(set<int> oports, char *ip, int udp_socket, struct in_addr destination){
@@ -194,8 +199,8 @@ queue<string> oracle_information(set<int> oports, char *ip, int udp_socket, stru
         cout << "before if"<< endl;
         if (strstr(messages_from_server.c_str(), CHECKSUM_STRING.c_str())){
             cout << "bang" << endl;
-            string source_addr_in_string = string_manipulation("source address being ", messages_from_server);
-            string checksum = string_manipulation("checksum is ", messages_from_server);
+            string source_addr_in_string = string_manipulation("source address being ", messages_from_server, '!');
+            string checksum = string_manipulation("checksum of ", messages_from_server, ',');
             u_short short_checksum = (unsigned short) (stoul(checksum, 0, 16));
             string s_phrase = secret_phrase(short_checksum, source_addr_in_string, udp_socket);
             cout << "secret phrase is: " << s_phrase << endl;
