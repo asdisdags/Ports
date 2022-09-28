@@ -181,6 +181,7 @@ struct sockaddr_in local_address(){
     connect(the_socket, (const struct sockaddr *)&local, sizeof(local));
 
     struct sockaddr_in name;
+    name.sin_port = htons(0);
     socklen_t namelen = sizeof(name);
     getsockname(the_socket, (struct sockaddr *)&name, &namelen);
     cout << "local ip: " << inet_ntoa(((struct sockaddr_in *)&name)->sin_addr) << endl;
@@ -190,6 +191,23 @@ struct sockaddr_in local_address(){
     return name;
 
 }
+
+// struct addr_in get_port(){
+//     sockaddr_in local;
+//     local.sin_family = AF_INET;
+//     local.sin_addr.s_addr = htonl(INADDR_ANY);
+//     local.sin_port = htons(0);
+
+//     struct sockaddr_in sin;
+//     int addrlen = sizeof(sin);
+//     if(getsockname(clientSock, (struct sockaddr *)&sin, &addrlen) == 0 &&
+//     sin.sin_family == AF_INET &&
+//     addrlen == sizeof(sin))
+//     {
+//         int local_port = ntohs(sin.sin_port);
+//     }
+
+// }
 
   
 
@@ -237,8 +255,9 @@ int evil_bit(const char* ip, struct sockaddr_in destination){
     iphdr->ip_dst = destination.sin_addr;
 
     // udp header
-    udphdr->uh_sport = htons(local.sin_port);
-    udphdr->uh_dport = htons(evil_port);
+    udphdr->uh_sport = local.sin_port;
+    cout << "this is prot : " << htons(local.sin_port) << endl;
+    udphdr->uh_dport = htons(4008);
     udphdr->uh_ulen = htons(sizeof(struct udphdr) + strlen(group_data));
     udphdr->uh_sum = 0;
     strcpy(message, group_data);
@@ -249,9 +268,9 @@ int evil_bit(const char* ip, struct sockaddr_in destination){
         exit(1);
     }
     struct sockaddr_in receive_address;
-    inet_aton(source, &receive_address.sin_addr);
-    receive_address.sin_family = AF_INET;
     receive_address.sin_port = htons(local.sin_port);
+    cout << "this is prot : " << receive_address.sin_port << endl;
+    inet_aton(source, &receive_address.sin_addr);
     cout << "before fd set" << endl;
     fd_set readfds;
     FD_SET(receive_socket, &readfds);
@@ -277,6 +296,7 @@ int evil_bit(const char* ip, struct sockaddr_in destination){
         //setsockopt(raw_sock, IPPROTO_IP, IP_HDRINCL, &IPHDR_OPT, sizeof(IPHDR_OPT)
         if(setsockopt(receive_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == 0) {
             cout << "we made it through timeout" << endl;
+            
             int res = recvfrom(receive_socket, receiving_buffer, receiving_buffer_len, 0, (sockaddr *)&receive_address, (socklen_t *)&receive_address_len);
             if (res < 0){
                 cout << "Error receiving packet" << endl;
