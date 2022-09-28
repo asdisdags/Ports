@@ -247,19 +247,19 @@ int evil_bit(const char* ip, struct sockaddr_in destination){
         exit(1);
     }
     struct sockaddr_in receive_address;
-    inet_aton(ip, &receive_address.sin_addr);
+    inet_aton(source, &receive_address.sin_addr);
     receive_address.sin_family = AF_INET;
-    receive_address.sin_port = htons(30000);
+    receive_address.sin_port = htons(local.sin_port);
     cout << "before fd set" << endl;
     fd_set readfds;
     FD_SET(receive_socket, &readfds);
     struct timeval tv;
     tv.tv_sec = 1;
-    tv.tv_usec = 0;
+    tv.tv_usec = 50000;
 
-    int source_len = sizeof(source);
-
-    char *receiving_buffer = new char[1400];
+    int receive_address_len = sizeof(receive_address);
+    int receiving_buffer_len = 1400;
+    char *receiving_buffer = new char[receiving_buffer_len];
 
 
     string messages_from_server;
@@ -271,32 +271,29 @@ int evil_bit(const char* ip, struct sockaddr_in destination){
             cout << "Error sending packet" << endl;
         }
         cout << "after sendto" << endl;
-
-        if(connect(raw_sock, (struct sockaddr *)&destination, sizeof(destination)) < 0){
-            cout << "Error connecting socket" << endl;
-        }
-
-        //if(select(receive_socket + 1, &readfds, NULL, NULL, &tv)> 0){
-        int res = recvfrom(receive_socket, receiving_buffer, 1400, 0, (struct sockaddr *)&receive_address, (socklen_t *)&source_len);
-        cout << "after recvfrom" << endl;
-        if (res < 0){
-            cout << "Error receiving packet" << endl;
-        }
-        else {
-            cout << "HELLO" << endl;
-            char src_address[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &(receive_address.sin_addr), src_address, INET_ADDRSTRLEN);
-            if((strcmp(ip, source) == 0) && (ntohs(receive_address.sin_port) == evil_port)){
-                receiving_buffer[res] = '\0';
-                secret_port_evil = receiving_buffer + res - 4;
-                close(raw_sock);
-                close(receive_socket);
-                cout << "Messages: " << receiving_buffer << endl;
-                cout << "Secret Port: " << secret_port_evil << endl;
-                return stoi(secret_port_evil);
-                }
+        //(select(receive_socket + 1, &readfds, NULL, NULL, &tv) > 0)
+        //setsockopt(raw_sock, IPPROTO_IP, IP_HDRINCL, &IPHDR_OPT, sizeof(IPHDR_OPT)
+        if(setsockopt(receive_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == 0) {
+            cout << "we made it through timeout" << endl;
+            int res = recvfrom(receive_socket, receiving_buffer, receiving_buffer_len, 0, (sockaddr *)&receive_address, (socklen_t *)&receive_address_len);
+            if (res < 0){
+                cout << "Error receiving packet" << endl;
             }
-        //}
+            else {
+                cout << "HELLO" << endl;
+                char src_address[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &(receive_address.sin_addr), src_address, INET_ADDRSTRLEN);
+                if((strcmp(ip, source) == 0) && (ntohs(receive_address.sin_port) == evil_port)){
+                    receiving_buffer[res] = '\0';
+                    secret_port_evil = receiving_buffer - 4;
+                    close(raw_sock);
+                    close(receive_socket);
+                    cout << "Messages: " << receiving_buffer << endl;
+                    cout << "Secret Port: " << secret_port_evil << endl;
+                    return stoi(secret_port_evil);
+                    }
+            }
+        }
     }
     return -1;
 }
