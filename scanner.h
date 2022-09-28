@@ -27,10 +27,10 @@ class Scanner{
         struct hostent *server;
         struct timeval tv;
 
-        Scanner(const char* ip, int port_from, int port_to);
+        Scanner(const char* ip);
         
         int open_socket();
-        set<int> scan(int low_port, int high_port, string host);
+        set<int> scan(int low_port, int high_port);
 
     private:
         int udp_sock;
