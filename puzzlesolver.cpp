@@ -259,7 +259,7 @@ string checksum_solver(int sockfd, char *ip_address) {
     while (strstr(message.c_str(), CHECKSUM.c_str()) == NULL) {
         string message = get_message_from_port(ports[CHECKSUM], sockfd, ip_address, initial_message, strlen(initial_message));
     }
-
+    cout << "Message recieved: " << message << endl;
     // get source address and checksum from message
     string source_address = get_source_address(message);
     string checksum_string = get_checksum_string(message);
@@ -427,14 +427,16 @@ return -1;
 
 string knock_knock(vector<string> ports_in_order, string secret_message, char* ip, int sockfd){
     string knock_msg;
+    string receiver;
     cout << "before for loop" << endl;
     for(int i = 0; i < ports_in_order.size(); i++){
         char msg_buf[1400];
         int port_to_send = stoi(ports_in_order.at(i));
         strcpy(msg_buf, secret_message.c_str());
-        string receiver = get_message_from_port(port_to_send, sockfd, ip, msg_buf, 1400);
+        receiver = get_message_from_port(port_to_send, sockfd, ip, msg_buf, 1400);
         knock_msg = receiver;
-        cout << "knock msg: "<< knock_msg << endl;
+        cout << "port " << port_to_send << " knock msg: "<< knock_msg << endl;
+        
     }
     return knock_msg;
 }
