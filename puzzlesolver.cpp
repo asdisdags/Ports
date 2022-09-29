@@ -38,9 +38,6 @@ string ORACLE = "I am the oracle,";
 string SECRET = "My boss told me ";
 string EVIL = "The dark side of";
 
-char SECRET_PHRASE[] = "Ennyn Durin Aran Moria. Pedo Mellon a Minno. Im Narvi hain echant. Celebrimbor o Eregion teithant i thiw hin.";
-
-char hidden_ports[] = "4028, 4014";
 // map for open ports and their messages
 map<string, int> ports;
 
@@ -55,7 +52,7 @@ string get_message_from_port(int port, int sockfd, char *ip_address, char *buffe
     sin.sin_port = htons(port);
     sin.sin_addr.s_addr = inet_addr(ip_address);
     inet_aton(ip_address, &sin.sin_addr);
-
+    
     if (rcv_sock == 0) {
         rcv_sock = sockfd;
     }
@@ -141,24 +138,6 @@ string get_source_address(string message) {
     return source_address;
 }
 
-string fix_secret_phrase(string message) {
-    string fixed_string;
-    int i;
-    string substring = "the secret phrase: \n";  // substring before source address 
-    
-    if (message.find(substring) != string::npos) {
-        i = message.find(substring) + substring.length(); // find the index where the substring ends
-
-        // get source address from message, '!' appears after the source address
-        while (i != message.length()) {
-            fixed_string += message[i];
-            i++;
-        }
-    }
-
-    return fixed_string;
-}
-
 // returns checksum string from checksum message
 string get_checksum_string(string message) {
     string checksum_string;
@@ -176,6 +155,50 @@ string get_checksum_string(string message) {
 
     return checksum_string;
 }
+
+// returns secret port from SECRET message
+string get_secret_port(int sockfd, char *ip_address) {
+    string secret_port;
+    string substring = "secret port is "; // substring before secret port
+    
+    while (true) {
+        string message = get_message_from_port(ports[SECRET], sockfd, ip_address, initial_message, strlen(initial_message));
+
+        int i = message.find(substring) + substring.length(); // find the index where the substring ends
+    
+        // get secret port from message
+        for (int j = 0; j < 4; j++) {
+            secret_port += message[i];
+            i++;
+        }  
+    
+        if (strstr(message.c_str(), SECRET.c_str())) {
+            return secret_port;
+        } else {
+            cout << "Failed to get secret port, trying again" << endl;
+        }
+    }   
+}
+
+// returns secret phrase from success message from checksum port
+string get_secret_phrase(string message) {
+    string secret_phrase; 
+
+    // check if secret phrase is in message
+    if (message.find('"') != string::npos) {
+        int i = message.find('"') + 1; // find start of secret phrase
+        
+        while (i < message.length()) {
+            if (message[i] == '"') {
+                break; // end of secret phrase reached
+            }
+            secret_phrase += message[i];
+            i++;
+        }
+    } 
+    return secret_phrase;
+}
+
 
 u_short calculate_checksum(unsigned short *udpheader, u_short len){
     long checksum;
@@ -305,39 +328,9 @@ string checksum_solver(int sockfd, char *ip_address) {
 
     // send udp packet to checksum port and get secret phrase
     string secret_phrase = get_message_from_port(ports[CHECKSUM], udp_sock, ip_address, udp_buffer, length);
-
-    // while (strstr(secret_phrase.c_str(), "Congratulations group_60!") == NULL) {
-    //     string secret_phrase = get_message_from_port(ports[CHECKSUM], udp_sock, ip_address, udp_buffer, length);
-    // }
     
     close(udp_sock);
     return secret_phrase;
-}
-
-
-// returns secret port from SECRET message
-int get_secret_port(int sockfd, char *ip_address) {
-    string secret_port;
-    string substring = "secret port is "; // substring before secret port
-    
-    while (true) {
-        string message = get_message_from_port(ports[SECRET], sockfd, ip_address, initial_message, strlen(initial_message));
-
-        int i = message.find(substring) + substring.length(); // find the index where the substring ends
-    
-        // get secret port from message
-        for (int j = 0; j < 4; j++) {
-            secret_port += message[i];
-            i++;
-        }  
-    
-        if (strstr(message.c_str(), SECRET.c_str())) {
-            return stoi(secret_port);
-        } else{
-            cout << "Failed to get secret port, trying again" << endl;
-        }
-    }
-    
 }
 
 
@@ -449,67 +442,9 @@ int evil_bit_solver(const char* ip, struct sockaddr_in destination){
     return -1;
 }
 
-string knock_knock(vector<string> ports_in_order, string secret_message, char* ip, int sockfd){
-    string knock_msg;
-    string receiver;
-    for(int i = 0; i < ports_in_order.size(); i++){
-        char msg_buf[1400];
-        int port_to_send = stoi(ports_in_order.at(i));
-        strcpy(msg_buf, secret_message.c_str());
-        cout << "msg_buf: " << msg_buf << endl;
-        receiver = get_message_from_port(port_to_send, sockfd, ip, msg_buf, strlen(msg_buf));
-        string message = get_message_from_port(4021, sockfd, ip, hidden_ports, strlen(hidden_ports));
-        string message2 = get_message_from_port(4014, sockfd, ip, SECRET_PHRASE, strlen(SECRET_PHRASE));
-
-        cout << "port " << port_to_send << " knock msg: "<< receiver << endl;
-        knock_msg = receiver;
-        cout << "port " << port_to_send << " knock msg: "<< knock_msg << endl;
-        
-    }
-    return knock_msg;
-}
-
-
-void knock(string message, string the_secret_phrase, char* ip, int sockfd){
-    char msg_buf[sizeof(message)];
-    memset(msg_buf, 0, 1400);
-    vector<string> order_of_knock_ports;
-    strcpy(msg_buf, message.c_str());
-    string oracle_message = get_message_from_port(ports[ORACLE], sockfd, ip, msg_buf, strlen(msg_buf));
-    //int port, int sockfd, char *ip_address, char *buffer, int length, int rcv_sock = 0, sockaddr_in *rcv_addr = nullptr)
-    stringstream s_streamer(oracle_message);
-    while(s_streamer.good()){
-        string substr;
-        getline(s_streamer, substr, ',');
-        order_of_knock_ports.push_back(substr);
-    }
-    string knock_msg = knock_knock(order_of_knock_ports, the_secret_phrase, ip, sockfd);
-    cout << "knock_msg: " << knock_msg << endl;
-}
-
-string get_secret_phrase(string message) {
-    string secret_phrase; 
-
-    // check if secret phrase is in message
-    if (message.find('"') != string::npos) {
-        int i = message.find('"') + 1; // find start of secret phrase
-        
-        while (i < message.length()) {
-            if (message[i] == '"') {
-                break; // end of secret phrase reached
-            }
-            secret_phrase += message[i];
-            i++;
-        }
-    }
-    
-    return secret_phrase;
-}
-
 void oracle_solver(int sockfd, char * ip_address, char *hidden_ports, char *secret_phrase) {
     // get ports in knock order from oracle port
     string knock_order = get_message_from_port(ports[ORACLE], sockfd, ip_address, hidden_ports, strlen(hidden_ports));
-    cout << "message: " << knock_order << endl;
 
     vector<int> ports_in_order;
     stringstream s_streamer(knock_order);
@@ -574,25 +509,23 @@ int main(int argc, char *argv[]) {
 
     // map open ports to their secret message
     map_open_ports(open_ports, sockfd, ip);
-   
+    
+    // get secret phrase from checksum port
     string checksum_success = checksum_solver(sockfd, ip);
-    cout << "checksum success: " << checksum_success << endl;
     string secret_phrase = get_secret_phrase(checksum_success);
-    
     char secret_phrase_char[109];
-
     strcpy(secret_phrase_char, secret_phrase.c_str());
-    // server_address.sin_family = AF_INET;
     
-    // int evil_secret_port = evil_bit_solver(ip, server_address);
-    // cout << "evil secret port: " << evil_secret_port << endl;
-    // int secret_port = get_secret_port(sockfd, ip); 
-    // cout << "secret port: " << secret_port << endl;
-    
+    // get hidden port from evil bit port
+    string evil_secret_port = evil_bit_solver(ip, server_address);
+
+    // get hidden port from secret port
+    string secret_port = get_secret_port(sockfd, ip); 
+
+    char hidden_ports[] = secret_port + ", " + evil_bit_port;
+
     oracle_solver(sockfd, ip, hidden_ports, secret_phrase_char);
-    // string secret_comma_ports = to_string(secret_port) + "," + to_string(evil_secret_port);
-    // cout << "secret comma ports: " << secret_comma_ports << endl;
-    // knock(secret_comma_ports, secret_phrase, ip, sockfd);
+
     close(sockfd);
     return 0;
 }
