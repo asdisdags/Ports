@@ -38,23 +38,21 @@ string ORACLE = "I am the oracle,";
 string SECRET = "My boss told me ";
 string EVIL = "The dark side of";
 
-char SECRET_PHRASE[] = "Ennyn Durin Aran Moria. Pedo Mellon a Minno. Im Narvi hain echant. Celebrimbor o Eregion teithant i thiw hin.";
-
-char hidden_ports[] = "4028, 4014";
 // map for open ports and their messages
 map<string, int> ports;
 
 string get_message_from_port(int port, int sockfd, char *ip_address, char *buffer, int length, int rcv_sock = 0, sockaddr_in *rcv_addr = nullptr) {
     string message = "";
-    char recv_buffer[4096];
-    memset(recv_buffer, 0, sizeof(recv_buffer));
+    char recv_buffer[1400];
+    memset(recv_buffer, 0, 1400);
 
     // establish connection to port
     struct sockaddr_in sin;
     sin.sin_family = AF_INET;
     sin.sin_port = htons(port);
     sin.sin_addr.s_addr = inet_addr(ip_address);
-
+    inet_aton(ip_address, &sin.sin_addr);
+    
     if (rcv_sock == 0) {
         rcv_sock = sockfd;
     }
@@ -68,27 +66,30 @@ string get_message_from_port(int port, int sockfd, char *ip_address, char *buffe
     struct timeval tv;
     tv.tv_sec = 0;
     tv.tv_usec = 500000;
-    setsockopt(rcv_sock, SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof(tv));
 
     while (strlen(recv_buffer) == 0) {
+
         if (sendto(sockfd, buffer, length, 0, (const struct sockaddr *)&sin, sizeof(sin)) < 0)
         {
             perror("Failed to send");
             exit(1);
         }
+
         setsockopt(rcv_sock, SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof(tv));
-        memset(recv_buffer, 0, sizeof(recv_buffer));
-        cout <<"len: " << rcv_addr_len << endl;
+
+        memset(recv_buffer, 0, 1400);
+
         if (recvfrom(rcv_sock, recv_buffer, sizeof(recv_buffer), 0, (sockaddr *)rcv_addr, (socklen_t *)&rcv_addr_len) >= 0){
             
             message = recv_buffer;
+            cout << "From port " << port <<  ": " << message << "\n" << endl;
             return message; 
-
         }
     }
 
     return message; // returns empty string
 }
+
 
 // adds ports to their corresponding messages in the ports map
 void map_open_ports(set<int> open_ports, int sockfd, char *ip_address) {
@@ -113,7 +114,6 @@ void map_open_ports(set<int> open_ports, int sockfd, char *ip_address) {
         else if (strstr(message.c_str(), EVIL.c_str())) {
             ports[EVIL] = port;
         }
-
         // clear message
         message.clear();
     }
@@ -138,24 +138,6 @@ string get_source_address(string message) {
     return source_address;
 }
 
-string fix_secret_phrase(string message) {
-    string fixed_string;
-    int i;
-    string substring = "the secret phrase: \n";  // substring before source address 
-    
-    if (message.find(substring) != string::npos) {
-        i = message.find(substring) + substring.length(); // find the index where the substring ends
-
-        // get source address from message, '!' appears after the source address
-        while (i != message.length()) {
-            fixed_string += message[i];
-            i++;
-        }
-    }
-
-    return fixed_string;
-}
-
 // returns checksum string from checksum message
 string get_checksum_string(string message) {
     string checksum_string;
@@ -174,7 +156,50 @@ string get_checksum_string(string message) {
     return checksum_string;
 }
 
-// code from https://www.binarytides.com/raw-udp-sockets-c-linux/
+// returns secret port from SECRET message
+string get_secret_port(int sockfd, char *ip_address) {
+    string secret_port;
+    string substring = "secret port is "; // substring before secret port
+    
+    while (true) {
+        string message = get_message_from_port(ports[SECRET], sockfd, ip_address, initial_message, strlen(initial_message));
+
+        int i = message.find(substring) + substring.length(); // find the index where the substring ends
+    
+        // get secret port from message
+        for (int j = 0; j < 4; j++) {
+            secret_port += message[i];
+            i++;
+        }  
+    
+        if (strstr(message.c_str(), SECRET.c_str())) {
+            return secret_port;
+        } else {
+            cout << "Failed to get secret port, trying again" << endl;
+        }
+    }   
+}
+
+// returns secret phrase from success message from checksum port
+string get_secret_phrase(string message) {
+    string secret_phrase; 
+
+    // check if secret phrase is in message
+    if (message.find('"') != string::npos) {
+        int i = message.find('"') + 1; // find start of secret phrase
+        
+        while (i < message.length()) {
+            if (message[i] == '"') {
+                break; // end of secret phrase reached
+            }
+            secret_phrase += message[i];
+            i++;
+        }
+    } 
+    return secret_phrase;
+}
+
+
 u_short calculate_checksum(unsigned short *udpheader, u_short len){
     long checksum;
     u_short odd_byte;
@@ -198,7 +223,6 @@ u_short calculate_checksum(unsigned short *udpheader, u_short len){
     return checksum_short;
 }
 
-// code from https://www.binarytides.com/raw-udp-sockets-c-linux/
 int create_udp_packet(int port, char *ip_address, char* udp_buffer, u_short checksum, string source_address) {
     char *data, *pseudogram;
     // IP header
@@ -233,8 +257,8 @@ int create_udp_packet(int port, char *ip_address, char* udp_buffer, u_short chec
     iphdr->ip_sum = htons(calculate_checksum((unsigned short *)udp_buffer, iphdr->ip_len));
 
     // set UDP header values
-    udphdr->uh_dport = htons(port);
-    udphdr->uh_sport = htons(64436); // ?
+    udphdr->uh_dport = htons(ports[EVIL]);
+    udphdr->uh_sport = htons(64436); 
     udphdr->uh_sum = 0;
     udphdr->uh_ulen = htons(sizeof(struct udphdr));
 
@@ -256,6 +280,7 @@ int create_udp_packet(int port, char *ip_address, char* udp_buffer, u_short chec
    
     memcpy(data, &initial_message, strlen(initial_message));
 
+    // using Monte Carlo to find the correct checksum
     for (int i = 0; i < IP_MAXPACKET; i++) {
         if (p_checksum != checksum_htonsed) {
             udphdr->uh_sport = htons(i);
@@ -300,101 +325,77 @@ string checksum_solver(int sockfd, char *ip_address) {
 		perror("Failed to create udp socket");
 		exit(0);
 	}
-    string succeed_msg = "Congratulations group_60!";
-    while(true){
-    // send udp message to checksum port and get secret phrase
-        string secret_phrase = get_message_from_port(ports[CHECKSUM], sockfd, ip_address, udp_buffer, length);
-        if(strstr(secret_phrase.c_str(), succeed_msg.c_str())){
-            close(udp_sock);
-            return secret_phrase;
-        }
-        else{
-            cout << "Failed to get secret phrase, trying again" << endl;
-        }
 
-
-        
-    }
-}
-
-
-// returns secret port from SECRET message
-int get_secret_port(int sockfd, char *ip_address) {
-    while(true){
-        string message = get_message_from_port(ports[SECRET], sockfd, ip_address, initial_message, strlen(initial_message));
-        
-        // while (strstr(message.c_str(), "SECRET") == NULL) {
-        //     message = get_message_from_port(ports[SECRET], sockfd, ip_address, initial_message, strlen(initial_message));
-        // }
-
-        string secret_port;
-        string substring = "secret port is "; // substring before secret port
-
-        int i = message.find(substring) + substring.length(); // find the index where the substring ends
+    // send udp packet to checksum port and get secret phrase
+    string secret_phrase = get_message_from_port(ports[CHECKSUM], udp_sock, ip_address, udp_buffer, length);
     
-        // get secret port from message
-        for (int j = 0; j < 4; j++) {
-            secret_port += message[i];
-            i++;
-        }  
-    
-        if (strstr(message.c_str(), SECRET.c_str())) {
-            return stoi(secret_port);
-        } else{
-            cout << "Failed to get secret port, trying again" << endl;
-        }
-    }
-    
+    close(udp_sock);
+    return secret_phrase;
 }
 
 
 int evil_bit_solver(const char* ip, struct sockaddr_in destination){
+    char packet[4096], *data;
+
     inet_aton(ip, &destination.sin_addr);
-    int the_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    
     struct sockaddr_in local;
-    unsigned int desired_port;
     memset(&local, 0, sizeof(local));
     local.sin_family = AF_INET;
     local.sin_addr.s_addr = inet_addr(ip);
     local.sin_port = htons(ports[EVIL]);
 
-    if(connect(the_socket, (const struct sockaddr *)&local, sizeof(local)) < 0){
-        cout << "connect error" << endl;
-        exit(0);
-    } 
-
     struct sockaddr_in name;
     int name_len = sizeof(name);
     bzero(&name, name_len);
     socklen_t namelen = sizeof(name);
-    getsockname(the_socket, (struct sockaddr *)&name, &namelen);
+
+    // create raw socket
     int raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-    if(raw_sock < 0){
-        cout << "raw socket error" << endl;
+    if (raw_sock < 0) {
+        perror("Failed to create raw socket");
         exit(0);
     }
-    int IPHDR_OPT = 1;
-    if(setsockopt(raw_sock, IPPROTO_IP, IP_HDRINCL, &IPHDR_OPT, sizeof(IPHDR_OPT)) < 0){
-        cout << "setsockopt error" << endl;
-        exit(0);
-    }
-
-    char udp_buffer[4096];
-    memset(udp_buffer, 0, 4096);
-    char group_data[128];
-    strcpy(group_data, "$group_60$");
-
-    struct ip *iphdr = (struct ip *)udp_buffer;
-    struct udphdr *udphdr = (struct udphdr *)(udp_buffer + sizeof(struct ip));
-    char *message = (char *)(udp_buffer + sizeof(struct ip) + sizeof(struct udphdr));
     
-    //ipheader 
+    // set socket options with ip header included
+    int idphdr_opt = 1;
+    if (setsockopt(raw_sock, IPPROTO_IP, IP_HDRINCL, &idphdr_opt, sizeof(idphdr_opt)) < 0){
+        perror("Failed to set socket options");
+        exit(1);
+    }
+
+    // create a socket that recieves from the raw socket
+    int receive_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (receive_socket < 0) {
+        perror("Failed to create recieving socket");
+        exit(1);
+    }
+
+    // connect socket to local address
+    if (connect(receive_socket, (const struct sockaddr *)&local, sizeof(local)) < 0) {
+        perror("Failed to connect ");
+        exit(1);
+    }
+
+    getsockname(receive_socket, (struct sockaddr *)&name, &namelen);
+
+    memset(packet, 0, 4096);
+
+    // IP header
+    struct ip *iphdr = (struct ip *)packet;
+    // UDP header
+    struct udphdr *udphdr = (struct udphdr *)(packet + sizeof(struct ip));
+
+    data = packet + sizeof(struct ip) + sizeof(struct udphdr);
+    strcpy(data, "$group_60$");
+
+    //ip header 
     iphdr->ip_hl = 5;
     iphdr->ip_v = 4;
     iphdr->ip_tos = 0;
-    iphdr->ip_len = sizeof(struct ip) + sizeof(struct udphdr) + 2;
+    iphdr->ip_len = htons(sizeof(struct ip) + sizeof(struct udphdr) + strlen(data));
     iphdr->ip_id = htons(0);
-    iphdr->ip_off = htons(0x8000);
+    iphdr->ip_off = 0x8000;
     iphdr->ip_ttl = 255;
     iphdr->ip_p = IPPROTO_UDP;
     iphdr->ip_sum = 0;
@@ -404,12 +405,11 @@ int evil_bit_solver(const char* ip, struct sockaddr_in destination){
     //udp header
     udphdr->uh_sport = name.sin_port;
     udphdr->uh_dport = htons(ports[EVIL]);
-    udphdr->uh_ulen = htons(sizeof(struct udphdr) + strlen(group_data));
+    udphdr->uh_ulen = htons(sizeof(struct udphdr) + strlen(data));
     udphdr->uh_sum = 0;
-    strcpy(message, group_data);
 
     fd_set readfds;
-    FD_SET(the_socket, &readfds);
+    FD_SET(receive_socket, &readfds);
     struct timeval tv;
     tv.tv_sec = 1;
     tv.tv_usec = 50000;
@@ -418,10 +418,12 @@ int evil_bit_solver(const char* ip, struct sockaddr_in destination){
 
     string messages_from_server;
     char* secret_port_evil;
+
+    // af hverju for loopa?
     for(int i = 0; i < 5; i++){
-        sendto(raw_sock, &udp_buffer, (sizeof(struct ip) + sizeof(struct udphdr) + strlen(group_data)), 0, (struct sockaddr *)&destination, sizeof(destination)); 
-        setsockopt(the_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-        int res = recvfrom(the_socket, receiving_buffer, receive_buffer_len, 0, (sockaddr *)&name, (socklen_t *)&name_len);
+        sendto(raw_sock, &packet, sizeof(packet), 0, (struct sockaddr *)&destination, sizeof(destination)); 
+        setsockopt(receive_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        int res = recvfrom(receive_socket, receiving_buffer, receive_buffer_len, 0, (sockaddr *)&name, (socklen_t *)&(namelen));
         if (res < 0){
             cout << "did not receive packet" << endl;
         }
@@ -437,52 +439,29 @@ int evil_bit_solver(const char* ip, struct sockaddr_in destination){
         }
     }
 
-
-
-
-
-return -1;
+    return -1;
 }
 
-string knock_knock(vector<string> ports_in_order, string secret_message, char* ip, int sockfd){
-    string knock_msg;
-    string receiver;
-    for(int i = 0; i < ports_in_order.size(); i++){
-        char msg_buf[1400];
-        int port_to_send = stoi(ports_in_order.at(i));
-        strcpy(msg_buf, secret_message.c_str());
-        cout << "msg_buf: " << msg_buf << endl;
-        receiver = get_message_from_port(port_to_send, sockfd, ip, msg_buf, strlen(msg_buf));
-        string message = get_message_from_port(4021, sockfd, ip, hidden_ports, strlen(hidden_ports));
-        string message2 = get_message_from_port(4014, sockfd, ip, SECRET_PHRASE, strlen(SECRET_PHRASE));
+void oracle_solver(int sockfd, char * ip_address, char *hidden_ports, char *secret_phrase) {
+    // get ports in knock order from oracle port
+    string knock_order = get_message_from_port(ports[ORACLE], sockfd, ip_address, hidden_ports, strlen(hidden_ports));
 
-        cout << "port " << port_to_send << " knock msg: "<< receiver << endl;
-        knock_msg = receiver;
-        cout << "port " << port_to_send << " knock msg: "<< knock_msg << endl;
-        
-    }
-    return knock_msg;
-}
+    vector<int> ports_in_order;
+    stringstream s_streamer(knock_order);
 
-
-void knock(string message, string the_secret_phrase, char* ip, int sockfd){
-    char msg_buf[sizeof(message)];
-    memset(msg_buf, 0, 1400);
-    vector<string> order_of_knock_ports;
-    strcpy(msg_buf, message.c_str());
-    string oracle_message = get_message_from_port(ports[ORACLE], sockfd, ip, msg_buf, strlen(msg_buf));
-    //int port, int sockfd, char *ip_address, char *buffer, int length, int rcv_sock = 0, sockaddr_in *rcv_addr = nullptr)
-    stringstream s_streamer(oracle_message);
+    // seperate the ports on comma and add to vector
     while(s_streamer.good()){
         string substr;
         getline(s_streamer, substr, ',');
-        order_of_knock_ports.push_back(substr);
+        ports_in_order.push_back(stoi(substr));
     }
-    string knock_msg = knock_knock(order_of_knock_ports, the_secret_phrase, ip, sockfd);
-    cout << "knock_msg: " << knock_msg << endl;
 
+    for (int port : ports_in_order) {
+        // get message from port
+        string message = get_message_from_port(port, sockfd, ip_address, secret_phrase, strlen(secret_phrase));
+        cout << "message: " << message << endl;
+    }
 }
-
 
 int main(int argc, char *argv[]) {
     struct sockaddr_in server_address;
@@ -499,8 +478,12 @@ int main(int argc, char *argv[]) {
             exit(0);
         }
 
-        // find open ports from 4000-4100
-        // open_ports = Scanner(ip).scan(4000, 4100);
+        open_ports = scan(ip, 4000, 4100);
+
+        while (open_ports.size() < 4) {
+            cout << "Couldn't find all open ports, trying again..." << endl;
+            open_ports = scan(ip, 4000, 4100);
+        }
     }
 
     else if (argc == 6) {
@@ -526,21 +509,23 @@ int main(int argc, char *argv[]) {
 
     // map open ports to their secret message
     map_open_ports(open_ports, sockfd, ip);
+    
+    // get secret phrase from checksum port
+    string checksum_success = checksum_solver(sockfd, ip);
+    string secret_phrase = get_secret_phrase(checksum_success);
+    char secret_phrase_char[109];
+    strcpy(secret_phrase_char, secret_phrase.c_str());
+    
+    // get hidden port from evil bit port
+    string evil_secret_port = evil_bit_solver(ip, server_address);
 
-    string secret_phrase = checksum_solver(sockfd, ip);
-    secret_phrase = fix_secret_phrase(secret_phrase);
-    server_address.sin_family = AF_INET;
-    
-    int evil_secret_port = evil_bit_solver(ip, server_address);
-    int secret_port = get_secret_port(sockfd, ip); 
-    
-    string secret_comma_ports = to_string(secret_port) + "," + to_string(evil_secret_port);
-    string message = get_message_from_port(4021, sockfd, ip, hidden_ports, strlen(hidden_ports));
-    string message2 = get_message_from_port(4014, sockfd, ip, SECRET_PHRASE, strlen(SECRET_PHRASE));
-    cout << message << endl;
-    cout << message2 << endl;
-    //knock(secret_comma_ports, secret_phrase, ip, sockfd);
-    // close(sockfd);
-    // secret_port_solver(sockfd, ip);
+    // get hidden port from secret port
+    string secret_port = get_secret_port(sockfd, ip); 
+
+    char hidden_ports[] = secret_port + ", " + evil_bit_port;
+
+    oracle_solver(sockfd, ip, hidden_ports, secret_phrase_char);
+
+    close(sockfd);
     return 0;
 }
