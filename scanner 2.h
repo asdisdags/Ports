@@ -1,22 +1,18 @@
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <sstream>
-#include <netdb.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <iostream>
-#include <string.h>
+#ifndef SCANNER_123u488932u9
+#define SCANNER_123u488932u9
+
 #include <set>
+#include <map>
+#include <string>
+#include "stdio.h"
+#include "stdlib.h"
 
 using namespace std;
 
-set<int> scan(int low_port, int high_port, string host){
+map<string, int> scan (char* host, int low_port, int high_port) {
     char server_message[2048];
     char client_message[2048];
-    set<int> open_ports;
+    map<string, int> open_ports;
 
     for (int i = low_port; i <= high_port; i++) {
         int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -34,45 +30,25 @@ set<int> scan(int low_port, int high_port, string host){
         int sock_addr_len = sizeof(server_address);
         server_address.sin_family = AF_INET;
         server_address.sin_port = htons(i);
-        server_address.sin_addr.s_addr = inet_addr(host.c_str());
+        server_address.sin_addr.s_addr = inet_addr(host);
         
         // set timeout for recvfrom() - if no response before timeout, port is closed
         struct timeval tv;
         tv.tv_sec = 0;
-        tv.tv_usec = 200000;
+        tv.tv_usec = 100000;
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const void*)&tv, sizeof(tv));
+        
         if (sendto(sock, client_message, strlen(client_message), 0, (struct sockaddr*)&server_address, sizeof(server_address)) < 0){
             perror("Failed to send message");
         }
         if (recvfrom(sock, server_message, sizeof(server_message), 0, (struct sockaddr*)&server_address, (socklen_t*)&sock_addr_len) >= 0){
-            open_ports.insert(i);
+            open_ports[server_message] = i;
         }
        
         close(sock);
     }
 
     return open_ports;
-}
+};
 
-int main(int argc, char* argv[])
-{   
-    // check if the user entered the correct number of arguments
-    if (argc < 4) { 
-        printf("usage: scanner <IP address> <low port> <high port>\n"); 
-        exit(1); 
-    }
-
-    string host = argv[1];
-    int low_port = atoi(argv[2]);
-    int high_port = atoi(argv[3]);
-
-    set<int> open_ports = scan(low_port, high_port, host);
-
-    cout << "The following ports are open: " << endl;
-    for (int port : open_ports) {
-        cout << port << endl;
-    }
-
-    return 0;
-}
-    
+#endif

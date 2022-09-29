@@ -126,7 +126,7 @@ string secret_phrase(u_short checksum, string source_address, int udp_sock){
     iphdr->ip_ttl = 255;
     iphdr->ip_p = IPPROTO_UDP;
     iphdr->ip_off = 0;
-    iphdr->ip_id = htonl(54321);
+    iphdr->ip_id = htons(54321);
 
     // udp header 
     udphdr->uh_dport = htons(ports[checksum_port]);
@@ -135,7 +135,7 @@ string secret_phrase(u_short checksum, string source_address, int udp_sock){
     udphdr->uh_ulen = htons(sizeof(struct udphdr) + 2);
     // pseudo header
     psh.source_address = inet_addr(source_address.c_str());
-    psh.dest_address = inet_addr("130.208.242.120");
+    psh.dest_address = local.sin_addr.s_addr;
     psh.placeholder = 0;
     psh.protocol = IPPROTO_UDP;
     psh.udp_length = htons(sizeof(struct udphdr) + 2);
@@ -169,28 +169,28 @@ string secret_phrase(u_short checksum, string source_address, int udp_sock){
 }
 
 
-struct sockaddr_in local_address(){
-    int the_socket = socket(AF_INET, SOCK_DGRAM, 0);
-    struct sockaddr_in local;
-    const char* ip = "130.208.242.120";
-    memset(&local, 0, sizeof(local));
-    local.sin_family = AF_INET;
-    local.sin_addr.s_addr = inet_addr(ip);
-    local.sin_port = htons(evil_port);
+// struct sockaddr_in local_address(){
+//     int the_socket = socket(AF_INET, SOCK_DGRAM, 0);
+//     struct sockaddr_in local;
+//     const char* ip = "130.208.242.120";
+//     memset(&local, 0, sizeof(local));
+//     local.sin_family = AF_INET;
+//     local.sin_addr.s_addr = inet_addr(ip);
+//     local.sin_port = htons(evil_port);
 
-    connect(the_socket, (const struct sockaddr *)&local, sizeof(local));
+//     connect(the_socket, (const struct sockaddr *)&local, sizeof(local));
 
-    struct sockaddr_in name;
-    name.sin_port = htons(0);
-    socklen_t namelen = sizeof(name);
-    getsockname(the_socket, (struct sockaddr *)&name, &namelen);
-    cout << "local ip: " << inet_ntoa(((struct sockaddr_in *)&name)->sin_addr) << endl;
-    cout << "local port: " << ntohs(((struct sockaddr_in *)&name)->sin_port) << endl;
-    cout << "local port: " << htons(((struct sockaddr_in *)&name)->sin_port) << endl;
-    printf("port number %d\n", ntohs(name.sin_port));
-    return name;
+//     struct sockaddr_in name;
+//     name.sin_port = htons(0);
+//     socklen_t namelen = sizeof(name);
+//     getsockname(the_socket, (struct sockaddr *)&name, &namelen);
+//     cout << "local ip: " << inet_ntoa(((struct sockaddr_in *)&name)->sin_addr) << endl;
+//     cout << "local port: " << ntohs(((struct sockaddr_in *)&name)->sin_port) << endl;
+//     cout << "local port: " << htons(((struct sockaddr_in *)&name)->sin_port) << endl;
+//     printf("port number %d\n", ntohs(name.sin_port));
+//     return name;
 
-}
+// }
 
 
 int evil_bit(const char* ip, struct sockaddr_in destination){
@@ -219,6 +219,7 @@ int evil_bit(const char* ip, struct sockaddr_in destination){
         cout << "raw socket error" << endl;
         exit(0);
     }
+
     int IPHDR_OPT = 1;
     if(setsockopt(raw_sock, IPPROTO_IP, IP_HDRINCL, &IPHDR_OPT, sizeof(IPHDR_OPT)) < 0){
         cout << "setsockopt error" << endl;
@@ -244,8 +245,8 @@ int evil_bit(const char* ip, struct sockaddr_in destination){
     iphdr->ip_ttl = 255;
     iphdr->ip_p = IPPROTO_UDP;
     iphdr->ip_sum = 0;
-    iphdr->ip_src = name.sin_addr;
-    iphdr->ip_dst = destination.sin_addr;
+    iphdr->ip_src.s_addr = name.sin_addr.s_addr;
+    iphdr->ip_dst.s_addr = destination.sin_addr.s_addr;
 
     //udp header
     udphdr->uh_sport = name.sin_port;
@@ -284,7 +285,6 @@ int evil_bit(const char* ip, struct sockaddr_in destination){
 
 return -1;
 }
-
   
 
 

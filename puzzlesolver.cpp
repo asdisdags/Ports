@@ -175,7 +175,7 @@ string get_secret_port(int sockfd, char *ip_address) {
         if (strstr(message.c_str(), SECRET.c_str())) {
             return secret_port;
         } else {
-            cout << "Failed to get secret port, trying again" << endl;
+            cout << "Failed to get secret port, trying again..." << endl;
         }
     }  
     return secret_port; 
@@ -345,7 +345,7 @@ string evil_bit_solver(const char* ip, struct sockaddr_in destination){
     local.sin_port = htons(ports[EVIL]);
 
     if(connect(the_socket, (const struct sockaddr *)&local, sizeof(local)) < 0){
-        cout << "connect error" << endl;
+        perror("Failed to connect to socket");
         exit(0);
     } 
 
@@ -354,16 +354,15 @@ string evil_bit_solver(const char* ip, struct sockaddr_in destination){
     bzero(&name, name_len);
     socklen_t namelen = sizeof(name);
     getsockname(the_socket, (struct sockaddr *)&name, &namelen);
-    cout << "local ip: " << inet_ntoa(((struct sockaddr_in *)&name)->sin_addr) << endl;
-    cout << "local port: " << ntohs(((struct sockaddr_in *)&name)->sin_port) << endl;
+    
     int raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     if(raw_sock < 0){
-        cout << "raw socket error" << endl;
+        perror("Failed to create raw socket");
         exit(0);
     }
     int IPHDR_OPT = 1;
     if(setsockopt(raw_sock, IPPROTO_IP, IP_HDRINCL, &IPHDR_OPT, sizeof(IPHDR_OPT)) < 0){
-        cout << "setsockopt error" << endl;
+        perror("Failed to include ip header on raw socket");
         exit(0);
     }
 
@@ -409,22 +408,17 @@ string evil_bit_solver(const char* ip, struct sockaddr_in destination){
 
     sendto(raw_sock, &udp_buffer, (sizeof(struct ip) + sizeof(struct udphdr) + strlen(group_data)), 0, (struct sockaddr *)&destination, sizeof(destination)); 
     setsockopt(the_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
     int res = recvfrom(the_socket, receiving_buffer, receive_buffer_len, 0, (sockaddr *)&name, (socklen_t *)&name_len);
     if (res < 0){
-        cout << "did not receive packet" << endl;
+        cout << "Did not receive packet. Trying again..." << endl;
     }
-    else{
+    else {
         secret_port_evil = receiving_buffer + res - 4;
-        cout << "Message : " << receiving_buffer << endl;
-        cout << "Secret Port : " << secret_port_evil << endl;
         return secret_port_evil;
     }
 
-
-
-
-
-return secret_port_evil;
+    return secret_port_evil;
 }
 
 void oracle_solver(int sockfd, char * ip_address, char *hidden_ports, char *secret_phrase) {
@@ -444,7 +438,6 @@ void oracle_solver(int sockfd, char * ip_address, char *hidden_ports, char *secr
     for (int port : ports_in_order) {
         // get message from port
         string message = get_message_from_port(port, sockfd, ip_address, secret_phrase, strlen(secret_phrase));
-        cout << "message: " << message << endl;
     }
 }
 
@@ -459,7 +452,7 @@ int main(int argc, char *argv[]) {
         ip = argv[1];
         sockfd = socket(AF_INET, SOCK_DGRAM, 0);
         if (sockfd < 0) {
-            cout << "Error creating socket" << endl;
+            perror("Failed to create socket");
             exit(0);
         }
 
@@ -475,7 +468,7 @@ int main(int argc, char *argv[]) {
         ip = argv[1];
         sockfd = socket(AF_INET, SOCK_DGRAM, 0);
         if (sockfd < 0) {
-            cout << "Error creating socket" << endl;
+            perror("Failed to create socket");
             exit(0);
         };
 
